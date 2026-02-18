@@ -2,6 +2,74 @@
 import React from 'react';
 import Button from './ui/Button';
 
+interface ClassInfo {
+  id: string;
+  name: string;
+  description: string;
+  riskLevel: string;
+  commonIn: string;
+  keyFeatures: string;
+}
+
+const classInfoMap: Record<string, ClassInfo> = {
+  akiec: {
+    id: 'akiec',
+    name: 'Actinic keratoses and intraepithelial carcinoma',
+    description: 'Actinic keratoses (AK) are rough, scaly patches caused by prolonged UV exposure. They are considered precancerous and can progress to squamous cell carcinoma if left untreated. Intraepithelial carcinoma (Bowen\'s disease) is an early form of squamous cell carcinoma confined to the epidermis.',
+    riskLevel: 'Moderate — Precancerous',
+    commonIn: 'Fair-skinned individuals with chronic sun exposure, typically over age 40',
+    keyFeatures: 'Rough, dry or scaly patches; pink to reddish-brown color; commonly found on sun-exposed areas (face, ears, hands)',
+  },
+  bcc: {
+    id: 'bcc',
+    name: 'Basal cell carcinoma',
+    description: 'Basal cell carcinoma (BCC) is the most common type of skin cancer. It arises from the basal cells in the lowest layer of the epidermis. BCC rarely metastasizes but can cause significant local tissue destruction if untreated. It is strongly associated with UV radiation exposure.',
+    riskLevel: 'High — Malignant (rarely metastatic)',
+    commonIn: 'Fair-skinned adults, especially those with a history of sunburns or chronic sun exposure',
+    keyFeatures: 'Pearly or waxy bumps; flat, flesh-colored or brown scar-like lesions; may have visible blood vessels; rolled borders',
+  },
+  bkl: {
+    id: 'bkl',
+    name: 'Benign keratosis-like lesions',
+    description: 'This category includes seborrheic keratoses, solar lentigines, and lichen planus-like keratoses. These are non-cancerous growths that appear as waxy, stuck-on lesions. While cosmetically bothersome, they are generally harmless and do not require treatment unless symptomatic.',
+    riskLevel: 'Low — Benign',
+    commonIn: 'Adults over age 50; prevalence increases with age',
+    keyFeatures: 'Waxy, stuck-on appearance; brown to black color; well-defined borders; variable texture from smooth to rough',
+  },
+  df: {
+    id: 'df',
+    name: 'Dermatofibroma',
+    description: 'Dermatofibromas are common, benign skin nodules of uncertain origin, possibly triggered by minor injuries like insect bites. They are firm, fibrous growths found most commonly on the legs. They are harmless and usually do not require treatment.',
+    riskLevel: 'Low — Benign',
+    commonIn: 'Young to middle-aged adults, more frequent in women',
+    keyFeatures: 'Firm, raised nodule; dimples inward when pinched (dimple sign); brown to reddish-brown; typically 0.5–1 cm in diameter',
+  },
+  mel: {
+    id: 'mel',
+    name: 'Melanoma',
+    description: 'Melanoma is the most dangerous form of skin cancer, arising from melanocytes (pigment-producing cells). It can develop from an existing mole or appear as a new dark spot. Early detection is critical, as melanoma can metastasize to other organs. The ABCDE rule (Asymmetry, Border, Color, Diameter, Evolving) is used for clinical assessment.',
+    riskLevel: 'Very High — Malignant (can metastasize)',
+    commonIn: 'All skin types; higher risk with UV exposure, family history, fair skin, and presence of many moles',
+    keyFeatures: 'Asymmetrical shape; irregular/blurred borders; multiple colors (brown, black, red, white, blue); diameter >6mm; evolving size or shape',
+  },
+  nv: {
+    id: 'nv',
+    name: 'Melanocytic nevi',
+    description: 'Melanocytic nevi (moles) are benign proliferations of melanocytes. They are extremely common and most people have 10–40 moles. While the vast majority are harmless, atypical or dysplastic nevi may have a slightly increased risk of developing into melanoma and should be monitored.',
+    riskLevel: 'Low — Benign (monitor atypical nevi)',
+    commonIn: 'All ages and skin types; typically appear in childhood and adolescence',
+    keyFeatures: 'Uniform color (tan, brown, or dark brown); round/oval shape; well-defined borders; usually <6mm; flat or raised',
+  },
+  vasc: {
+    id: 'vasc',
+    name: 'Vascular lesions',
+    description: 'Vascular lesions include cherry angiomas, angiokeratomas, pyogenic granulomas, and hemorrhage. They arise from blood vessels in the skin. Most are benign but some, like pyogenic granulomas, may bleed easily and require treatment. They present as red to purple spots or nodules.',
+    riskLevel: 'Low — Usually benign',
+    commonIn: 'All ages; cherry angiomas increase with age',
+    keyFeatures: 'Red, purple, or blue coloration; may be flat or raised; sharply demarcated; may blanch with pressure',
+  },
+};
+
 interface ResultsScreenProps {
   image: string | null;
   onAnalyzeAnother: () => void;
@@ -22,6 +90,7 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({ image, onAnalyzeAnother, 
   ];
 
   const predictedClass = classes.reduce((prev, current) => (prev.score > current.score) ? prev : current);
+  const info = classInfoMap[predictedClass.id];
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 pb-12 text-slate-900">
@@ -125,27 +194,33 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({ image, onAnalyzeAnother, 
               </div>
             </section>
 
-            {/* Model Information Section */}
+            {/* Condition Information Section */}
             <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Model Information</h2>
+              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">About This Condition</h2>
               <div className="space-y-4">
+                <p className="text-sm text-slate-600 leading-relaxed">{info.description}</p>
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Architecture</span>
-                  <span className="text-sm font-medium text-slate-700">EfficientNet-V2</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Risk Level</span>
+                  <span className={`text-sm font-semibold ${
+                    info.riskLevel.includes('Very High') ? 'text-red-600' :
+                    info.riskLevel.includes('High') ? 'text-orange-600' :
+                    info.riskLevel.includes('Moderate') ? 'text-amber-600' :
+                    'text-green-600'
+                  }`}>{info.riskLevel}</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Inference Type</span>
-                  <span className="text-sm font-medium text-slate-700">Server-side inference</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Commonly Found In</span>
+                  <span className="text-sm text-slate-700">{info.commonIn}</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Output Format</span>
-                  <span className="text-sm font-medium text-slate-700">Multi-class probability distribution</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Key Features</span>
+                  <span className="text-sm text-slate-700">{info.keyFeatures}</span>
                 </div>
               </div>
             </section>
 
-            {/* User Actions */}
-            <div className="space-y-3">
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3">
               <Button onClick={onAnalyzeAnother}>
                 <div className="flex items-center justify-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -162,12 +237,6 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({ image, onAnalyzeAnother, 
                   View Past Analyses
                 </div>
               </Button>
-              <button 
-                onClick={onLogout}
-                className="w-full text-xs font-semibold text-slate-400 hover:text-red-500 transition-colors py-2"
-              >
-                Logout from System
-              </button>
             </div>
           </div>
         </div>

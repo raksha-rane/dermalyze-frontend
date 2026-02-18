@@ -4,13 +4,11 @@ import Input from './ui/Input';
 import Button from './ui/Button';
 import { supabase } from '../lib/supabase';
 
-interface SignupScreenProps {
-  onNavigateToLogin: () => void;
+interface ResetPasswordScreenProps {
+  onPasswordReset: () => void;
 }
 
-const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin }) => {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+const ResetPasswordScreen: React.FC<ResetPasswordScreenProps> = ({ onPasswordReset }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,11 +18,6 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    if (!email.trim()) {
-      setError('Please enter your email address.');
-      return;
-    }
 
     if (password.length < 6) {
       setError('Password must be at least 6 characters long.');
@@ -38,26 +31,16 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin }) => {
 
     setLoading(true);
     try {
-      const { error: authError } = await supabase.auth.signUp({
-        email: email.trim(),
+      const { error: updateError } = await supabase.auth.updateUser({
         password,
-        options: {
-          data: {
-            full_name: name.trim() || undefined,
-          },
-        },
       });
 
-      if (authError) {
-        if (authError.message.includes('already registered')) {
-          setError('This email is already registered. Please log in instead.');
-        } else if (authError.message.includes('valid email')) {
-          setError('Please enter a valid email address.');
-        } else {
-          setError(authError.message);
-        }
+      if (updateError) {
+        setError(updateError.message);
       } else {
         setSuccess(true);
+        // Sign out so the user must log in with the new password
+        await supabase.auth.signOut();
       }
     } catch (err: any) {
       setError('An unexpected error occurred. Please try again.');
@@ -77,15 +60,12 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin }) => {
               </svg>
             </div>
             <h2 className="text-2xl font-bold tracking-tight text-slate-900 mb-2">
-              Account Created!
+              Password Updated!
             </h2>
-            <p className="text-slate-500 text-sm mb-2 leading-relaxed">
-              Your account has been created successfully.
-            </p>
             <p className="text-slate-500 text-sm mb-8 leading-relaxed">
-              Please check your email inbox for a verification link to activate your account before logging in.
+              Your password has been successfully reset. Please log in with your new password.
             </p>
-            <Button onClick={onNavigateToLogin}>
+            <Button onClick={onPasswordReset}>
               Go to Login
             </Button>
           </div>
@@ -116,15 +96,15 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin }) => {
                 strokeLinecap="round" 
                 strokeLinejoin="round" 
                 strokeWidth={2} 
-                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" 
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" 
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 mb-1">
-            Create Account
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 mb-2">
+            Set New Password
           </h1>
-          <p className="text-slate-500 text-sm">
-            Access our advanced skin lesion classification system
+          <p className="text-slate-500 text-sm px-4">
+            Enter your new password below. It must be at least 6 characters.
           </p>
         </div>
 
@@ -135,22 +115,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin }) => {
             </div>
           )}
           <Input 
-            label="Name (Optional)" 
-            type="text" 
-            placeholder="Enter your full name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <Input 
-            label="Email" 
-            type="email" 
-            placeholder="Enter your email id"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <Input 
-            label="Password" 
+            label="New Password" 
             type="password" 
             placeholder="••••••••"
             value={password}
@@ -158,7 +123,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin }) => {
             required
           />
           <Input 
-            label="Confirm Password" 
+            label="Confirm New Password" 
             type="password" 
             placeholder="••••••••"
             value={confirmPassword}
@@ -174,25 +139,12 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin }) => {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Creating account...
+                  Updating...
                 </span>
-              ) : 'Create Account'}
+              ) : 'Reset Password'}
             </Button>
           </div>
         </form>
-
-        <div className="mt-8">
-          <button 
-            onClick={onNavigateToLogin}
-            disabled={loading}
-            className="w-full text-sm font-medium text-slate-500 hover:text-teal-600 transition-colors text-center flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Back to Login
-          </button>
-        </div>
       </div>
 
       <footer className="mt-12 text-center max-w-sm px-4">
@@ -204,4 +156,4 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin }) => {
   );
 };
 
-export default SignupScreen;
+export default ResetPasswordScreen;
