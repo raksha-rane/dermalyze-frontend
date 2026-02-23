@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Input from './ui/Input';
 import Button from './ui/Button';
 import { supabase } from '../lib/supabase';
@@ -10,15 +10,37 @@ interface LoginScreenProps {
   onLoginSuccess: () => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ 
-  onNavigateToSignup, 
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 30_000;
+
+const LoginScreen: React.FC<LoginScreenProps> = ({
+  onNavigateToSignup,
   onNavigateToForgotPassword,
-  onLoginSuccess
+  onLoginSuccess,
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [failCount, setFailCount] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [lockCountdown, setLockCountdown] = useState(0);
+
+  useEffect(() => {
+    if (!lockedUntil) return;
+    const interval = setInterval(() => {
+      const remaining = Math.ceil((lockedUntil - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setLockedUntil(null);
+        setFailCount(0);
+        setLockCountdown(0);
+        setError('');
+      } else {
+        setLockCountdown(remaining);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lockedUntil]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +51,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       return;
     }
 
+    if (lockedUntil && Date.now() < lockedUntil) return;
+
     setLoading(true);
     try {
       const { error: authError } = await supabase.auth.signInWithPassword({
@@ -37,8 +61,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       });
 
       if (authError) {
-        if (authError.message.includes('Invalid login credentials')) {
-          setError('Invalid email or password. Please try again.');
+        const next = failCount + 1;
+        setFailCount(next);
+        if (next >= MAX_ATTEMPTS) {
+          const until = Date.now() + LOCKOUT_MS;
+          setLockedUntil(until);
+          setLockCountdown(Math.ceil(LOCKOUT_MS / 1000));
+          setError(`Too many failed attempts. Please wait ${LOCKOUT_MS / 1000} seconds.`);
+        } else if (authError.message.includes('Invalid login credentials')) {
+          setError(`Invalid email or password. ${MAX_ATTEMPTS - next} attempt${MAX_ATTEMPTS - next === 1 ? '' : 's'} remaining.`);
         } else if (authError.message.includes('Email not confirmed')) {
           setError('Please verify your email before logging in. Check your inbox for a confirmation link.');
         } else {
@@ -47,8 +78,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       } else {
         onLoginSuccess();
       }
-    } catch (err: any) {
-      setError('An unexpected error occurred. Please try again.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -84,13 +115,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
         <form onSubmit={handleSubmit} className="space-y-2">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-lg text-center font-medium">
+            <div role="alert" aria-live="assertive" className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-lg text-center font-medium">
               {error}
+            </div>
+          )}
+          {lockedUntil && (
+            <div role="status" aria-live="polite" className="mb-2 p-2 bg-amber-50 border border-amber-100 text-amber-700 text-xs rounded-lg text-center">
+              Locked — try again in {lockCountdown}s
             </div>
           )}
           <Input 
             label="Email" 
-            type="text" 
+            type="email" 
             placeholder="Enter your email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -106,7 +142,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           />
           
           <div className="pt-4">
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !!(lockedUntil && Date.now() < lockedUntil)}>
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">

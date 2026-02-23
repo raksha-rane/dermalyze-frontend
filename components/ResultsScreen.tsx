@@ -1,252 +1,230 @@
-
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Button from './ui/Button';
-
-interface ClassInfo {
-  id: string;
-  name: string;
-  description: string;
-  riskLevel: string;
-  commonIn: string;
-  keyFeatures: string;
-}
-
-const classInfoMap: Record<string, ClassInfo> = {
-  akiec: {
-    id: 'akiec',
-    name: 'Actinic keratoses and intraepithelial carcinoma',
-    description: 'Actinic keratoses (AK) are rough, scaly patches caused by prolonged UV exposure. They are considered precancerous and can progress to squamous cell carcinoma if left untreated. Intraepithelial carcinoma (Bowen\'s disease) is an early form of squamous cell carcinoma confined to the epidermis.',
-    riskLevel: 'Moderate — Precancerous',
-    commonIn: 'Fair-skinned individuals with chronic sun exposure, typically over age 40',
-    keyFeatures: 'Rough, dry or scaly patches; pink to reddish-brown color; commonly found on sun-exposed areas (face, ears, hands)',
-  },
-  bcc: {
-    id: 'bcc',
-    name: 'Basal cell carcinoma',
-    description: 'Basal cell carcinoma (BCC) is the most common type of skin cancer. It arises from the basal cells in the lowest layer of the epidermis. BCC rarely metastasizes but can cause significant local tissue destruction if untreated. It is strongly associated with UV radiation exposure.',
-    riskLevel: 'High — Malignant (rarely metastatic)',
-    commonIn: 'Fair-skinned adults, especially those with a history of sunburns or chronic sun exposure',
-    keyFeatures: 'Pearly or waxy bumps; flat, flesh-colored or brown scar-like lesions; may have visible blood vessels; rolled borders',
-  },
-  bkl: {
-    id: 'bkl',
-    name: 'Benign keratosis-like lesions',
-    description: 'This category includes seborrheic keratoses, solar lentigines, and lichen planus-like keratoses. These are non-cancerous growths that appear as waxy, stuck-on lesions. While cosmetically bothersome, they are generally harmless and do not require treatment unless symptomatic.',
-    riskLevel: 'Low — Benign',
-    commonIn: 'Adults over age 50; prevalence increases with age',
-    keyFeatures: 'Waxy, stuck-on appearance; brown to black color; well-defined borders; variable texture from smooth to rough',
-  },
-  df: {
-    id: 'df',
-    name: 'Dermatofibroma',
-    description: 'Dermatofibromas are common, benign skin nodules of uncertain origin, possibly triggered by minor injuries like insect bites. They are firm, fibrous growths found most commonly on the legs. They are harmless and usually do not require treatment.',
-    riskLevel: 'Low — Benign',
-    commonIn: 'Young to middle-aged adults, more frequent in women',
-    keyFeatures: 'Firm, raised nodule; dimples inward when pinched (dimple sign); brown to reddish-brown; typically 0.5–1 cm in diameter',
-  },
-  mel: {
-    id: 'mel',
-    name: 'Melanoma',
-    description: 'Melanoma is the most dangerous form of skin cancer, arising from melanocytes (pigment-producing cells). It can develop from an existing mole or appear as a new dark spot. Early detection is critical, as melanoma can metastasize to other organs. The ABCDE rule (Asymmetry, Border, Color, Diameter, Evolving) is used for clinical assessment.',
-    riskLevel: 'Very High — Malignant (can metastasize)',
-    commonIn: 'All skin types; higher risk with UV exposure, family history, fair skin, and presence of many moles',
-    keyFeatures: 'Asymmetrical shape; irregular/blurred borders; multiple colors (brown, black, red, white, blue); diameter >6mm; evolving size or shape',
-  },
-  nv: {
-    id: 'nv',
-    name: 'Melanocytic nevi',
-    description: 'Melanocytic nevi (moles) are benign proliferations of melanocytes. They are extremely common and most people have 10–40 moles. While the vast majority are harmless, atypical or dysplastic nevi may have a slightly increased risk of developing into melanoma and should be monitored.',
-    riskLevel: 'Low — Benign (monitor atypical nevi)',
-    commonIn: 'All ages and skin types; typically appear in childhood and adolescence',
-    keyFeatures: 'Uniform color (tan, brown, or dark brown); round/oval shape; well-defined borders; usually <6mm; flat or raised',
-  },
-  vasc: {
-    id: 'vasc',
-    name: 'Vascular lesions',
-    description: 'Vascular lesions include cherry angiomas, angiokeratomas, pyogenic granulomas, and hemorrhage. They arise from blood vessels in the skin. Most are benign but some, like pyogenic granulomas, may bleed easily and require treatment. They present as red to purple spots or nodules.',
-    riskLevel: 'Low — Usually benign',
-    commonIn: 'All ages; cherry angiomas increase with age',
-    keyFeatures: 'Red, purple, or blue coloration; may be flat or raised; sharply demarcated; may blanch with pressure',
-  },
-};
+import ResultCard from './ui/ResultCard';
+import ProbabilityChart from './ui/ProbabilityChart';
+import MedicalInfoCard from './ui/MedicalInfoCard';
+import { classInfoMap } from '../lib/classInfo';
+import { supabase } from '../lib/supabase';
+import type { ClassResult } from '../lib/types';
 
 interface ResultsScreenProps {
   image: string | null;
+  results: ClassResult[] | null;
   onAnalyzeAnother: () => void;
   onNavigateToHistory: () => void;
-  onLogout: () => void;
 }
 
-const ResultsScreen: React.FC<ResultsScreenProps> = ({ image, onAnalyzeAnother, onNavigateToHistory, onLogout }) => {
-  // Mock data as requested: Exactly 7 classes
-  const classes = [
-    { id: 'akiec', name: 'Actinic keratoses and intraepithelial carcinoma', score: 4.2 },
-    { id: 'bcc', name: 'Basal cell carcinoma', score: 12.8 },
-    { id: 'bkl', name: 'Benign keratosis-like lesions', score: 8.5 },
-    { id: 'df', name: 'Dermatofibroma', score: 2.1 },
-    { id: 'mel', name: 'Melanoma', score: 67.4 },
-    { id: 'nv', name: 'Melanocytic nevi', score: 3.5 },
-    { id: 'vasc', name: 'Vascular lesions', score: 1.5 }
-  ];
+/**
+ * ResultsScreen — Primary analysis output view.
+ *
+ * Redesigned following Laws of UX:
+ *
+ * 1. Jakob's Law — Layout mirrors EHR / radiology PACS conventions:
+ *    header with patient/case metadata, prominent diagnosis, two-column
+ *    detail view, and a subdued clinical disclaimer footer.
+ *
+ * 2. Visual Hierarchy — The predicted class name is the largest text on
+ *    screen, followed by the confidence score. Secondary information
+ *    (probability distribution, image, medical info) is subordinate.
+ *
+ * 3. Hick's Law — Probability bars are sorted descending so the eye
+ *    lands on the dominant prediction immediately. Action buttons are
+ *    reduced to two clear choices.
+ *
+ * 4. Miller's Law — 7 classes (within 7±2 limit). Medical info is
+ *    chunked into 4 labeled sections instead of free-form text.
+ *
+ * 5. Aesthetic-Usability Effect — Neutral medical palette (white, slate,
+ *    subtle teal accent), generous spacing, and clean card borders evoke
+ *    trust and professionalism.
+ *
+ * 6. Law of Proximity — Related data (confidence + risk badge) are
+ *    adjacent. Image and medical info are in the same column.
+ *
+ * 7. Law of Common Region — Each logical group lives in its own bordered
+ *    card, making the interface instantly scannable.
+ *
+ * 8. Doherty Threshold — Skeleton loading state provides < 400ms
+ *    perceived feedback. Bar animations give immediate visual response.
+ *
+ * 9. Tesler's Law — Irrelevant metadata removed. Complexity that must
+ *    exist (7-class distribution) is presented in the simplest form.
+ *
+ * 10. Fitts's Law — Primary CTA ("Analyze Another") is full-width with
+ *     generous padding. Back button in header is large tap-target.
+ */
+const ResultsScreen: React.FC<ResultsScreenProps> = ({
+  image,
+  results,
+  onAnalyzeAnother,
+  onNavigateToHistory,
+}) => {
+  const [loading, setLoading] = useState(true);
 
-  const predictedClass = classes.reduce((prev, current) => (prev.score > current.score) ? prev : current);
-  const info = classInfoMap[predictedClass.id];
+  // Doherty Threshold: skeleton -> content in < 400ms
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 350);
+    return () => clearTimeout(timer);
+  }, []);
 
-  return (
-    <div className="flex-1 flex flex-col bg-slate-50 pb-12 text-slate-900">
-      {/* Header Navigation */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10 shadow-sm">
-        <div className="flex items-center gap-2.5 cursor-pointer" onClick={onAnalyzeAnother}>
-          <div className="bg-teal-600 rounded-lg p-1.5">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-          </div>
-          <span className="text-xl font-bold tracking-tight text-slate-900">Dermalyze</span>
-        </div>
-        
-        <button 
-          onClick={onLogout}
-          className="text-sm font-medium text-slate-500 hover:text-red-600 transition-colors flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-red-50"
-        >
-          Logout
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-        </button>
-      </header>
+  // Use real results from the API; empty array fallback keeps the UI safe
+  const classes: ClassResult[] = results ?? [];
 
-      <main className="max-w-4xl mx-auto w-full px-6 py-8 flex flex-col gap-8">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Classification Results</h1>
-          <div className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-1 rounded uppercase tracking-wider">Analysis Complete</div>
-        </div>
+  const predictedClass = classes.length
+    ? classes.reduce((prev, cur) => (prev.score > cur.score ? prev : cur))
+    : null;
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Left Column: Primary Result & Probabilities */}
-          <div className="md:col-span-2 space-y-8">
-            {/* Primary Result Section */}
-            <section className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6 text-slate-400">Predicted Classification</h2>
-              <div className="flex items-end gap-4 mb-4">
-                <span className="text-4xl font-extrabold text-teal-700 tracking-tighter">
-                  {predictedClass.id.toUpperCase()}
-                </span>
-                <span className="text-slate-400 font-medium mb-1">({predictedClass.name})</span>
-              </div>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="text-2xl font-bold text-slate-800">{predictedClass.score.toFixed(1)}%</div>
-                <div className="text-sm font-medium text-slate-500">Confidence Score</div>
-              </div>
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                <p className="text-sm text-slate-600 leading-relaxed italic">
-                  “Confidence represents the model’s predicted probability for the selected class.”
-                </p>
-              </div>
-            </section>
+  const info = predictedClass ? classInfoMap[predictedClass.id] : undefined;
 
-            {/* Probability Visualization Section */}
-            <section className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Probability Distribution</h2>
-              <div className="space-y-5">
-                {classes.map((cls) => (
-                  <div key={cls.id} className="space-y-1.5">
-                    <div className="flex justify-between items-center text-xs font-semibold">
-                      <span className={`${cls.id === predictedClass.id ? 'text-teal-700' : 'text-slate-600'} flex gap-2`}>
-                        <span className="uppercase w-10">{cls.id}</span>
-                        <span className="text-slate-400 font-normal">{cls.name}</span>
-                      </span>
-                      <span className={cls.id === predictedClass.id ? 'text-teal-700' : 'text-slate-500'}>
-                        {cls.score.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-1000 ease-out ${cls.id === predictedClass.id ? 'bg-teal-600' : 'bg-slate-300'}`}
-                        style={{ width: `${cls.score}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
+  // Stable case ID — generated once per mount, never changes on re-render
+  const caseId = useMemo(
+    () => `DRM-${Date.now().toString(36).slice(-6).toUpperCase()}`,
+    [],
+  );
+  const analysisDate = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 
-          {/* Right Column: Image Context & Model Info */}
-          <div className="space-y-8">
-            {/* Image Context Section */}
-            <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Input Image</h2>
-              <div className="aspect-square w-full bg-slate-100 rounded-xl overflow-hidden border border-slate-100 flex items-center justify-center">
-                {image ? (
-                  <img src={image} alt="Input" className="object-cover w-full h-full" />
-                ) : (
-                  <div className="text-slate-300">
-                    <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                )}
-              </div>
-              <div className="mt-4 flex flex-col gap-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Capture Metadata</span>
-                <span className="text-xs text-slate-600 font-medium">Standard Dermatoscopy (1:1)</span>
-              </div>
-            </section>
+  // Persist the analysis record + image to Supabase once results are ready
+  useEffect(() => {
+    if (!results || !predictedClass) return;
 
-            {/* Condition Information Section */}
-            <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">About This Condition</h2>
-              <div className="space-y-4">
-                <p className="text-sm text-slate-600 leading-relaxed">{info.description}</p>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Risk Level</span>
-                  <span className={`text-sm font-semibold ${
-                    info.riskLevel.includes('Very High') ? 'text-red-600' :
-                    info.riskLevel.includes('High') ? 'text-orange-600' :
-                    info.riskLevel.includes('Moderate') ? 'text-amber-600' :
-                    'text-green-600'
-                  }`}>{info.riskLevel}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Commonly Found In</span>
-                  <span className="text-sm text-slate-700">{info.commonIn}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Key Features</span>
-                  <span className="text-sm text-slate-700">{info.keyFeatures}</span>
-                </div>
-              </div>
-            </section>
+    const saveRecord = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button onClick={onAnalyzeAnother}>
-                <div className="flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Analyze Another Image
-                </div>
-              </Button>
-              <Button variant="secondary" onClick={onNavigateToHistory}>
-                <div className="flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  View Past Analyses
-                </div>
-              </Button>
+        // Upload image to Supabase Storage
+        let image_url: string | null = null;
+        if (image) {
+          const blob = await (await fetch(image)).blob();
+          const ext = blob.type === 'image/png' ? 'png' : 'jpg';
+          const path = `${user.id}/${caseId}.${ext}`;
+          const { error: uploadErr } = await supabase.storage
+            .from('analysis-images')
+            .upload(path, blob, { contentType: blob.type });
+          if (!uploadErr) {
+            image_url = supabase.storage
+              .from('analysis-images')
+              .getPublicUrl(path).data.publicUrl;
+          }
+        }
+
+        // Insert analysis record
+        await supabase.from('analyses').insert({
+          user_id: user.id,
+          image_url,
+          predicted_class_id: predictedClass.id,
+          predicted_class_name: predictedClass.name,
+          confidence: predictedClass.score,
+          all_scores: results,
+        });
+      } catch (err) {
+        // Non-blocking — failed persistence should not disrupt the results view
+        console.warn('Failed to save analysis record:', err);
+      }
+    };
+
+    saveRecord();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Skeleton loading state (Doherty Threshold) */
+  if (loading) {
+    return (
+      <div className="flex-1 flex flex-col bg-slate-50 text-slate-900">
+        <main className="max-w-6xl mx-auto w-full px-4 sm:px-6 py-8 space-y-6">
+          <div className="h-40 bg-white border border-slate-200 rounded-xl animate-pulse" />
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <div className="lg:col-span-3 h-72 bg-white border border-slate-200 rounded-xl animate-pulse" />
+            <div className="lg:col-span-2 space-y-6">
+              <div className="h-52 bg-white border border-slate-200 rounded-xl animate-pulse" />
+              <div className="h-48 bg-white border border-slate-200 rounded-xl animate-pulse" />
             </div>
           </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Guard: show a minimal error state if results are missing
+  if (!predictedClass || !info) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="text-center">
+          <p className="text-slate-500 text-sm">No results available.</p>
+          <button onClick={onAnalyzeAnother} className="mt-4 text-teal-600 font-medium text-sm">
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col bg-slate-50 text-slate-900">
+      {/* MAIN CONTENT */}
+      <main className="max-w-6xl mx-auto w-full px-4 sm:px-6 py-8 flex flex-col gap-6">
+        {/* Case metadata bar */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+          <h1 className="text-sm font-semibold text-slate-500 uppercase tracking-widest">Analysis Result</h1>
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-slate-400 uppercase tracking-widest">Case ID:</span>
+            <span className="font-semibold text-slate-700 tabular-nums">{caseId}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-slate-400 uppercase tracking-widest">Date:</span>
+            <span className="font-semibold text-slate-700">{analysisDate}</span>
+          </div>
+        </div>
+
+        {/* PRIMARY RESULT CARD — includes analyzed image */}
+        <ResultCard
+          classId={predictedClass.id}
+          className={predictedClass.name}
+          confidence={predictedClass.score}
+          info={info}
+          imageUrl={image}
+        />
+
+        {/* PROBABILITY CHART — full width */}
+        <ProbabilityChart classes={classes} predictedClassId={predictedClass.id} />
+
+        {/* MEDICAL INFO — Full-width row below the bento pair */}
+        <MedicalInfoCard info={info} />
+
+        {/* Action buttons — full width */}
+        <div className="flex flex-col gap-3">
+          <Button onClick={onAnalyzeAnother}>
+            <span className="flex items-center justify-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Analyze Another Image
+            </span>
+          </Button>
+          <button
+            onClick={onNavigateToHistory}
+            className="w-full py-2.5 px-4 rounded-full font-medium text-sm border border-slate-200 text-slate-600 transition-all duration-200 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-700 active:bg-teal-100 active:border-teal-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-400"
+          >
+            <span className="flex items-center justify-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              View Past Analyses
+            </span>
+          </button>
         </div>
       </main>
 
-      <footer className="mt-auto py-10 text-center border-t border-slate-100 bg-white">
-        <div className="max-w-3xl mx-auto px-6">
-          <p className="text-[11px] font-medium text-slate-500 leading-relaxed">
-            “Results are probabilistic outputs generated by a machine learning model.
-            This tool is designed to assist clinical decision-making and should not replace professional medical diagnosis.”
+      {/* FOOTER — Clinical disclaimer (Tesler's Law: required but visually subordinate) */}
+      <footer className="mt-auto py-6 border-t border-slate-100 bg-white">
+        <div className="max-w-6xl mx-auto px-6">
+          <p className="text-[11px] text-slate-400 leading-relaxed text-center">
+            This tool generates probabilistic outputs from a machine learning model. It is designed
+            to assist clinical decision-making and does not replace professional medical diagnosis.
+            Always correlate with clinical findings and patient history.
           </p>
         </div>
       </footer>

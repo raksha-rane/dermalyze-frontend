@@ -6,9 +6,10 @@ import { supabase } from '../lib/supabase';
 
 interface SignupScreenProps {
   onNavigateToLogin: () => void;
+  onSignupSuccess?: (email: string) => void;
 }
 
-const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin }) => {
+const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin, onSignupSuccess }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -57,9 +58,13 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin }) => {
           setError(authError.message);
         }
       } else {
-        setSuccess(true);
+        if (onSignupSuccess) {
+          onSignupSuccess(email.trim());
+        } else {
+          setSuccess(true);
+        }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);

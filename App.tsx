@@ -1,193 +1,297 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from './lib/supabase';
-import LoginScreen from './components/LoginScreen';
-import SignupScreen from './components/SignupScreen';
-import ForgotPasswordScreen from './components/ForgotPasswordScreen';
-import DashboardScreen from './components/DashboardScreen';
-import UploadScreen from './components/UploadScreen';
-import ProcessingScreen from './components/ProcessingScreen';
-import ResultsScreen from './components/ResultsScreen';
-import HistoryScreen from './components/HistoryScreen';
-import HistoryDetailScreen from './components/HistoryDetailScreen';
-import ErrorScreen from './components/ErrorScreen';
-import AboutScreen from './components/AboutScreen';
-import HelpScreen from './components/HelpScreen';
-import LogoutConfirmScreen from './components/LogoutConfirmScreen';
-import ResetPasswordScreen from './components/ResetPasswordScreen';
+import type { ClassResult, AnalysisHistoryItem } from './lib/types';
+import ErrorBoundary from './components/ErrorBoundary';
+import AppLayout from './components/AppLayout';
 
-type View = 'login' | 'signup' | 'forgot-password' | 'reset-password' | 'dashboard' | 'upload' | 'processing' | 'results' | 'history' | 'history-detail' | 'error' | 'about' | 'help' | 'logout-confirm';
+// ── Code-split screen imports ─────────────────────────────────────────────────
+const LoginScreen          = lazy(() => import('./components/LoginScreen'));
+const SignupScreen         = lazy(() => import('./components/SignupScreen'));
+const ForgotPasswordScreen = lazy(() => import('./components/ForgotPasswordScreen'));
+const ResetPasswordScreen  = lazy(() => import('./components/ResetPasswordScreen'));
+const DashboardScreen      = lazy(() => import('./components/DashboardScreen'));
+const UploadScreen         = lazy(() => import('./components/UploadScreen'));
+const ProcessingScreen     = lazy(() => import('./components/ProcessingScreen'));
+const ResultsScreen        = lazy(() => import('./components/ResultsScreen'));
+const HistoryScreen        = lazy(() => import('./components/HistoryScreen'));
+const HistoryDetailScreen  = lazy(() => import('./components/HistoryDetailScreen'));
+const ErrorScreen          = lazy(() => import('./components/ErrorScreen'));
+const AboutScreen          = lazy(() => import('./components/AboutScreen'));
+const HelpScreen           = lazy(() => import('./components/HelpScreen'));
+const LogoutConfirmScreen  = lazy(() => import('./components/LogoutConfirmScreen'));
+const ProfileScreen        = lazy(() => import('./components/ProfileScreen'));
+const EmailVerificationScreen = lazy(() => import('./components/EmailVerificationScreen'));
 
+// ── Route paths ───────────────────────────────────────────────────────────────
+export const ROUTES = {
+  login:             '/login',
+  signup:            '/signup',
+  forgotPassword:    '/forgot-password',
+  resetPassword:     '/reset-password',
+  emailVerification: '/email-verification',
+  dashboard:         '/dashboard',
+  upload:            '/upload',
+  processing:        '/processing',
+  results:           '/results',
+  history:           '/history',
+  historyDetail:     '/history/detail',
+  error:             '/error',
+  about:             '/about',
+  help:              '/help',
+  profile:           '/profile',
+} as const;
+
+const PUBLIC_ROUTES: string[] = [
+  '/login', '/signup', '/forgot-password', '/reset-password', '/email-verification',
+];
+
+// ── Loading fallback ──────────────────────────────────────────────────────────
+const PageLoader = () => (
+  <div className="flex-1 flex items-center justify-center min-h-screen">
+    <div className="text-center">
+      <div className="inline-flex items-center justify-center w-12 h-12 bg-teal-50 rounded-xl mb-4">
+        <svg className="animate-spin h-6 w-6 text-teal-600" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+      </div>
+      <p className="text-sm text-slate-400">Loading…</p>
+    </div>
+  </div>
+);
+
+// ── App ───────────────────────────────────────────────────────────────────────
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<View>('login');
-  const [viewBeforeLogout, setViewBeforeLogout] = useState<View | null>(null);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [selectedHistoryItem, setSelectedHistoryItem] = useState<any>(null);
-  const [authChecked, setAuthChecked] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // Check for existing session on mount
+  const [selectedImage,       setSelectedImage]       = useState<string | null>(null);
+  const [analysisResults,     setAnalysisResults]     = useState<ClassResult[] | null>(null);
+  const [analysisError,       setAnalysisError]       = useState<string | null>(null);
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState<AnalysisHistoryItem | null>(null);
+  const [showLogoutConfirm,   setShowLogoutConfirm]   = useState(false);
+  const [prevPath,            setPrevPath]            = useState<string | null>(null);
+  const [authChecked,         setAuthChecked]         = useState(false);
+  const [signupEmail,         setSignupEmail]         = useState<string>('');
+
+  // ── Focus management ──────────────────────────────────────────────────────
+  const prevPathRef = useRef<string>('');
   useEffect(() => {
-    // Check if this is a password recovery redirect (URL contains type=recovery)
+    if (location.pathname === prevPathRef.current) return;
+    prevPathRef.current = location.pathname;
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>('h1, h2, [data-autofocus]');
+      if (el) {
+        el.setAttribute('tabindex', '-1');
+        el.focus({ preventScroll: false });
+        el.addEventListener('blur', () => el.removeAttribute('tabindex'), { once: true });
+      }
+    });
+  }, [location.pathname]);
+
+  // ── Auth init ─────────────────────────────────────────────────────────────
+  useEffect(() => {
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const isRecovery = hashParams.get('type') === 'recovery';
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (isRecovery && session) {
-        setCurrentView('reset-password');
-      } else if (session) {
-        setCurrentView('dashboard');
+        navigate(ROUTES.resetPassword, { replace: true });
+      } else if (session && PUBLIC_ROUTES.includes(location.pathname)) {
+        navigate(ROUTES.dashboard, { replace: true });
+      } else if (!session && !PUBLIC_ROUTES.includes(location.pathname)) {
+        navigate(ROUTES.login, { replace: true });
       }
       setAuthChecked(true);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setCurrentView('reset-password');
-        return;
-      }
-      if (!session && currentView !== 'signup' && currentView !== 'forgot-password') {
-        setCurrentView('login');
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') navigate(ROUTES.resetPassword);
+      if (event === 'SIGNED_OUT')        navigate(ROUTES.login);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleRequestLogout = () => {
-    setViewBeforeLogout(currentView);
-    setCurrentView('logout-confirm');
+    setPrevPath(location.pathname);
+    setShowLogoutConfirm(true);
   };
 
   const handleConfirmLogout = async () => {
-    await supabase.auth.signOut();
+    setShowLogoutConfirm(false);
     setSelectedImage(null);
     setSelectedHistoryItem(null);
-    setViewBeforeLogout(null);
-    setCurrentView('login');
+    await supabase.auth.signOut();
   };
 
   const handleCancelLogout = () => {
-    if (viewBeforeLogout) {
-      setCurrentView(viewBeforeLogout);
-    } else {
-      setCurrentView('dashboard');
-    }
+    setShowLogoutConfirm(false);
+    if (prevPath) navigate(prevPath);
   };
 
   const resetAnalysis = () => {
     setSelectedImage(null);
-    setCurrentView('upload');
+    setAnalysisResults(null);
+    setAnalysisError(null);
+    navigate(ROUTES.upload);
   };
 
-  const handleViewHistoryDetail = (item: any) => {
+  const handleViewHistoryDetail = (item: AnalysisHistoryItem) => {
     setSelectedHistoryItem(item);
-    setCurrentView('history-detail');
+    navigate(ROUTES.historyDetail);
   };
+
+  if (!authChecked) return <PageLoader />;
+
+  // ── Layout wrapper for all protected screens ──────────────────────────────
+  const Protected = ({ children }: { children: React.ReactNode }) => (
+    <AppLayout onLogout={handleRequestLogout}>
+      {children}
+    </AppLayout>
+  );
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
-      {!authChecked ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-teal-50 rounded-xl mb-4">
-              <svg className="animate-spin h-6 w-6 text-teal-600" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            </div>
-            <p className="text-sm text-slate-400">Loading...</p>
+    <ErrorBoundary>
+      <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            {/* ── Public ── */}
+            <Route path={ROUTES.login} element={
+              <LoginScreen
+                onNavigateToSignup={() => navigate(ROUTES.signup)}
+                onNavigateToForgotPassword={() => navigate(ROUTES.forgotPassword)}
+                onLoginSuccess={() => navigate(ROUTES.dashboard)}
+              />
+            } />
+            <Route path={ROUTES.signup} element={
+              <SignupScreen
+                onNavigateToLogin={() => navigate(ROUTES.login)}
+                onSignupSuccess={(email) => {
+                  setSignupEmail(email);
+                  navigate(ROUTES.emailVerification);
+                }}
+              />
+            } />
+            <Route path={ROUTES.forgotPassword} element={
+              <ForgotPasswordScreen onNavigateToLogin={() => navigate(ROUTES.login)} />
+            } />
+            <Route path={ROUTES.resetPassword} element={
+              <ResetPasswordScreen onPasswordReset={() => navigate(ROUTES.login)} />
+            } />
+            <Route path={ROUTES.emailVerification} element={
+              <EmailVerificationScreen
+                email={signupEmail}
+                onNavigateToLogin={() => navigate(ROUTES.login)}
+                onResendEmail={() => {
+                  if (signupEmail) {
+                    supabase.auth.resend({ type: 'signup', email: signupEmail });
+                  }
+                }}
+              />
+            } />
+
+            {/* ── Protected (all share the AppLayout sidebar) ── */}
+            <Route path={ROUTES.dashboard} element={
+              <Protected>
+                <DashboardScreen
+                  onNavigateToUpload={() => navigate(ROUTES.upload)}
+                  onNavigateToHistory={() => navigate(ROUTES.history)}
+                />
+              </Protected>
+            } />
+            <Route path={ROUTES.upload} element={
+              <Protected>
+                <UploadScreen
+                  selectedImage={selectedImage}
+                  onImageSelect={setSelectedImage}
+                  onBack={() => navigate(ROUTES.dashboard)}
+                  onRunClassification={() => navigate(ROUTES.processing)}
+                  onError={(msg) => { setAnalysisError(msg ?? null); navigate(ROUTES.error); }}
+                />
+              </Protected>
+            } />
+            <Route path={ROUTES.processing} element={
+              <Protected>
+                <ProcessingScreen
+                  image={selectedImage}
+                  onComplete={(results) => { setAnalysisResults(results); navigate(ROUTES.results); }}
+                  onError={(msg) => { setAnalysisError(msg ?? null); navigate(ROUTES.error); }}
+                />
+              </Protected>
+            } />
+            <Route path={ROUTES.results} element={
+              <Protected>
+                <ResultsScreen
+                  image={selectedImage}
+                  results={analysisResults}
+                  onAnalyzeAnother={resetAnalysis}
+                  onNavigateToHistory={() => navigate(ROUTES.history)}
+                />
+              </Protected>
+            } />
+            <Route path={ROUTES.history} element={
+              <Protected>
+                <HistoryScreen
+                  onBack={() => navigate(ROUTES.dashboard)}
+                  onViewDetails={handleViewHistoryDetail}
+                />
+              </Protected>
+            } />
+            <Route path={ROUTES.historyDetail} element={
+              <Protected>
+                <HistoryDetailScreen
+                  item={selectedHistoryItem}
+                  onBack={() => navigate(ROUTES.history)}
+                />
+              </Protected>
+            } />
+            <Route path={ROUTES.error} element={
+              <Protected>
+                <ErrorScreen
+                  onBackToUpload={resetAnalysis}
+                  message={analysisError ?? undefined}
+                />
+              </Protected>
+            } />
+            <Route path={ROUTES.about} element={
+              <Protected>
+                <AboutScreen onBack={() => navigate(ROUTES.dashboard)} />
+              </Protected>
+            } />
+            <Route path={ROUTES.help} element={
+              <Protected>
+                <HelpScreen onBack={() => navigate(ROUTES.dashboard)} />
+              </Protected>
+            } />
+            <Route path={ROUTES.profile} element={
+              <Protected>
+                <ProfileScreen onBack={() => navigate(ROUTES.dashboard)} />
+              </Protected>
+            } />
+
+            {/* Fallbacks */}
+            <Route path="/"  element={<Navigate to={ROUTES.login} replace />} />
+            <Route path="*"  element={<Navigate to={ROUTES.login} replace />} />
+          </Routes>
+        </Suspense>
+
+        {/* Logout confirmation overlay */}
+        {showLogoutConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <Suspense fallback={null}>
+              <LogoutConfirmScreen
+                onConfirm={handleConfirmLogout}
+                onCancel={handleCancelLogout}
+              />
+            </Suspense>
           </div>
-        </div>
-      ) : (
-        <>
-      {currentView === 'login' && (
-        <LoginScreen 
-          onNavigateToSignup={() => setCurrentView('signup')} 
-          onNavigateToForgotPassword={() => setCurrentView('forgot-password')}
-          onLoginSuccess={() => setCurrentView('dashboard')}
-        />
-      )}
-      {currentView === 'signup' && (
-        <SignupScreen onNavigateToLogin={() => setCurrentView('login')} />
-      )}
-      {currentView === 'forgot-password' && (
-        <ForgotPasswordScreen onNavigateToLogin={() => setCurrentView('login')} />
-      )}
-      {currentView === 'reset-password' && (
-        <ResetPasswordScreen onPasswordReset={() => setCurrentView('login')} />
-      )}
-      {currentView === 'dashboard' && (
-        <DashboardScreen 
-          onLogout={handleRequestLogout} 
-          onNavigateToUpload={() => setCurrentView('upload')}
-          onNavigateToHistory={() => setCurrentView('history')}
-          onNavigateToAbout={() => setCurrentView('about')}
-          onNavigateToHelp={() => setCurrentView('help')}
-        />
-      )}
-      {currentView === 'upload' && (
-        <UploadScreen 
-          selectedImage={selectedImage}
-          onImageSelect={setSelectedImage}
-          onBack={() => setCurrentView('dashboard')}
-          onLogout={handleRequestLogout}
-          onRunClassification={() => setCurrentView('processing')}
-          onError={() => setCurrentView('error')}
-        />
-      )}
-      {currentView === 'processing' && (
-        <ProcessingScreen 
-          onLogout={handleRequestLogout} 
-          onComplete={() => setCurrentView('results')}
-        />
-      )}
-      {currentView === 'results' && (
-        <ResultsScreen 
-          image={selectedImage}
-          onAnalyzeAnother={resetAnalysis}
-          onNavigateToHistory={() => setCurrentView('history')}
-          onLogout={handleRequestLogout}
-        />
-      )}
-      {currentView === 'history' && (
-        <HistoryScreen 
-          onBack={() => setCurrentView('dashboard')}
-          onLogout={handleRequestLogout}
-          onViewDetails={handleViewHistoryDetail}
-        />
-      )}
-      {currentView === 'history-detail' && (
-        <HistoryDetailScreen 
-          item={selectedHistoryItem}
-          onBack={() => setCurrentView('history')}
-          onLogout={handleRequestLogout}
-        />
-      )}
-      {currentView === 'error' && (
-        <ErrorScreen 
-          onBackToUpload={resetAnalysis}
-          onLogout={handleRequestLogout}
-        />
-      )}
-      {currentView === 'about' && (
-        <AboutScreen 
-          onBack={() => setCurrentView('dashboard')}
-        />
-      )}
-      {currentView === 'help' && (
-        <HelpScreen 
-          onBack={() => setCurrentView('dashboard')}
-        />
-      )}
-      {currentView === 'logout-confirm' && (
-        <LogoutConfirmScreen 
-          onConfirm={handleConfirmLogout}
-          onCancel={handleCancelLogout}
-        />
-      )}
-        </>
-      )}
-    </div>
+        )}
+      </div>
+    </ErrorBoundary>
   );
 };
 

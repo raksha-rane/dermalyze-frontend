@@ -1,97 +1,61 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Button from './ui/Button';
+import { supabase } from '../lib/supabase';
+import type { AnalysisHistoryItem } from '../lib/types';
+
+// Re-export so HistoryDetailScreen can still import from here
+export type { AnalysisHistoryItem };
 
 interface HistoryScreenProps {
   onBack: () => void;
-  onLogout: () => void;
   onViewDetails: (item: AnalysisHistoryItem) => void;
 }
 
-export interface AnalysisHistoryItem {
-  id: string;
-  date: string;
-  time: string;
-  classId: string;
-  className: string;
-  confidence: number;
-  imageUrl?: string;
-}
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) => {
+  const [historyItems, setHistoryItems] = useState<AnalysisHistoryItem[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onLogout, onViewDetails }) => {
-  const historyItems: AnalysisHistoryItem[] = [
-    { 
-      id: '1', 
-      date: 'Oct 24, 2023', 
-      time: '14:32', 
-      classId: 'mel', 
-      className: 'Melanoma', 
-      confidence: 67.4,
-      imageUrl: '/images/1.jpg'
-    },
-    { 
-      id: '2', 
-      date: 'Oct 23, 2023', 
-      time: '11:15', 
-      classId: 'nv', 
-      className: 'Melanocytic nevi', 
-      confidence: 92.1,
-      imageUrl: '/images/2.jpg'
-    },
-    { 
-      id: '3', 
-      date: 'Oct 21, 2023', 
-      time: '09:45', 
-      classId: 'bcc', 
-      className: 'Basal cell carcinoma', 
-      confidence: 54.8,
-      imageUrl: '/images/3.jpg'
-    },
-    { 
-      id: '4', 
-      date: 'Oct 19, 2023', 
-      time: '16:20', 
-      classId: 'bkl', 
-      className: 'Benign keratosis-like lesions', 
-      confidence: 78.2,
-      imageUrl: '/images/4.jpg'
-    },
-    { 
-      id: '5', 
-      date: 'Oct 15, 2023', 
-      time: '13:05', 
-      classId: 'df', 
-      className: 'Dermatofibroma', 
-      confidence: 88.5,
-      imageUrl: '/images/5.jpg'
-    },
-  ];
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('analyses')
+          .select('id, created_at, predicted_class_id, predicted_class_name, confidence, image_url, all_scores')
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (error) throw error;
+
+        const items: AnalysisHistoryItem[] = (data ?? []).map((row) => ({
+          id: row.id,
+          date: new Date(row.created_at).toLocaleDateString('en-US', {
+            year: 'numeric', month: 'short', day: 'numeric',
+          }),
+          time: new Date(row.created_at).toLocaleTimeString('en-US', {
+            hour: '2-digit', minute: '2-digit',
+          }),
+          classId: row.predicted_class_id,
+          className: row.predicted_class_name,
+          confidence: row.confidence,
+          imageUrl: row.image_url ?? undefined,
+          allScores: row.all_scores ?? undefined,
+        }));
+        setHistoryItems(items);
+      } catch {
+        setHistoryError('Could not load analysis history. Please try again.');
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+
+    fetchHistory();
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 text-slate-900 pb-12">
-      {/* Header Navigation */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10 shadow-sm">
-        <div className="flex items-center gap-2.5 cursor-pointer" onClick={onBack}>
-          <div className="bg-teal-600 rounded-lg p-1.5">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-          </div>
-          <span className="text-xl font-bold tracking-tight text-slate-900">Dermalyze</span>
-        </div>
-        
-        <button 
-          onClick={onLogout}
-          className="text-sm font-medium text-slate-500 hover:text-red-600 transition-colors flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-red-50"
-        >
-          Logout
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-        </button>
-      </header>
-
-      <main className="max-w-4xl mx-auto w-full px-6 py-8 flex flex-col gap-8">
+      <main className="max-w-4xl mx-auto w-full px-4 sm:px-6 py-8 flex flex-col gap-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button 
@@ -108,7 +72,59 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onLogout, onViewD
         </div>
 
         <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
+          {loadingHistory ? (
+            <div className="flex items-center justify-center py-16">
+              <svg className="animate-spin h-6 w-6 text-teal-600" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            </div>
+          ) : historyError ? (
+            <div className="py-12 px-6 text-center">
+              <p className="text-sm text-red-500 font-medium">{historyError}</p>
+            </div>
+          ) : historyItems.length === 0 ? (
+            <div className="py-16 px-6 text-center">
+              <p className="text-sm text-slate-400">No analyses found.</p>
+              <p className="text-xs text-slate-300 mt-1">Run your first classification to see it here.</p>
+            </div>
+          ) : (<>
+          {/* Mobile card layout (< md) */}
+          <ul className="divide-y divide-slate-100 md:hidden">
+            {historyItems.map((item) => (
+              <li key={item.id} className="flex items-center gap-4 px-4 py-4">
+                <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-300 border border-slate-200 overflow-hidden shrink-0">
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt="Lesion thumbnail" className="w-full h-full object-cover" />
+                  ) : (
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-bold text-teal-700 uppercase">{item.classId}</span>
+                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded tracking-tighter">{item.confidence.toFixed(1)}%</span>
+                  </div>
+                  <p className="text-xs text-slate-500 truncate">{item.className}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{item.date} · {item.time}</p>
+                </div>
+                <button
+                  onClick={() => onViewDetails(item)}
+                  className="shrink-0 text-teal-600 hover:text-teal-700 p-2 rounded-full hover:bg-teal-50 transition-colors"
+                  title="View Details"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {/* Desktop table layout (md+) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
@@ -169,6 +185,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onLogout, onViewD
               </tbody>
             </table>
           </div>
+          </>)}
         </section>
 
         <div className="p-6 bg-blue-50/30 rounded-2xl border border-blue-100">
@@ -179,7 +196,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onLogout, onViewD
                 </svg>
              </div>
              <p className="text-xs text-blue-700 font-medium leading-relaxed">
-               Note: Analysis history is stored locally within the browser session for reference during the clinical workflow and is subject to a 10-item limit. Historical data is not synchronized across devices.
+               Analysis history is fetched from your account and reflects up to the 50 most recent records, ordered newest first. Records are persisted across devices.
              </p>
            </div>
         </div>

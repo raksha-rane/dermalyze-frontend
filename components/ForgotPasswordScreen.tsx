@@ -36,8 +36,8 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onNavigateT
       } else {
         setSent(true);
       }
-    } catch (err: any) {
-      setError('An unexpected error occurred. Please try again.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }

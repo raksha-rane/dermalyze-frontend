@@ -9,9 +9,8 @@ interface LogoutConfirmScreenProps {
 
 const LogoutConfirmScreen: React.FC<LogoutConfirmScreenProps> = ({ onConfirm, onCancel }) => {
   return (
-    <div className="flex-1 flex flex-col bg-slate-50 items-center justify-center p-6 sm:p-12">
-      <div className="max-w-md w-full">
-        <div className="bg-white rounded-3xl border border-slate-200 p-10 sm:p-14 shadow-sm text-center">
+    <div className="w-full max-w-md">
+      <div className="bg-white rounded-3xl border border-slate-200 p-10 sm:p-14 shadow-sm text-center">
           
           {/* Professional Logout Icon */}
           <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 mx-auto mb-8">
@@ -38,11 +37,10 @@ const LogoutConfirmScreen: React.FC<LogoutConfirmScreenProps> = ({ onConfirm, on
           </div>
         </div>
 
-        <div className="mt-8 text-center">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
-            Dermalyze Session Management
-          </p>
-        </div>
+      <div className="mt-6 text-center">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+          Dermalyze Session Management
+        </p>
       </div>
     </div>
   );

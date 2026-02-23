@@ -2,20 +2,41 @@
 import React, { useState, useRef } from 'react';
 import Button from './ui/Button';
 
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_DIMENSION_PX = 448;            // resize longest edge to ≤ 448 px
+const JPEG_QUALITY = 1.0;               // lossless JPEG encoding
+
+/** Compress a data-URL image using canvas, returns a JPEG data-URL. */
+function compressImage(dataUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, MAX_DIMENSION_PX / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { resolve(dataUrl); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY));
+    };
+    img.onerror = () => reject(new Error('Failed to load image for compression.'));
+    img.src = dataUrl;
+  });
+}
+
 interface UploadScreenProps {
   selectedImage: string | null;
   onImageSelect: (img: string | null) => void;
   onBack: () => void;
-  onLogout: () => void;
   onRunClassification: () => void;
-  onError: () => void;
+  onError: (message?: string) => void;
 }
 
 const UploadScreen: React.FC<UploadScreenProps> = ({ 
   selectedImage, 
   onImageSelect, 
   onBack, 
-  onLogout, 
   onRunClassification,
   onError
 }) => {
@@ -25,13 +46,25 @@ const UploadScreen: React.FC<UploadScreenProps> = ({
   const validateAndProcessFile = (file: File) => {
     const validTypes = ['image/jpeg', 'image/png'];
     if (!validTypes.includes(file.type)) {
-      onError();
+      onError('Unsupported file type. Please upload a JPEG or PNG image.');
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      onError(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum allowed size is 10 MB.`);
       return;
     }
 
     const reader = new FileReader();
-    reader.onloadend = () => {
-      onImageSelect(reader.result as string);
+    reader.onloadend = async () => {
+      try {
+        const compressed = await compressImage(reader.result as string);
+        onImageSelect(compressed);
+      } catch {
+        onError('Failed to process the image. Please try a different file.');
+      }
+    };
+    reader.onerror = () => {
+      onError('Could not read the file. Please try again.');
     };
     reader.readAsDataURL(file);
   };
@@ -73,27 +106,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50">
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10 shadow-sm">
-        <div className="flex items-center gap-2.5 cursor-pointer" onClick={onBack}>
-          <div className="bg-teal-600 rounded-lg p-1.5">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-          </div>
-          <span className="text-xl font-bold tracking-tight text-slate-900">Dermalyze</span>
-        </div>
-        
-        <button 
-          onClick={onLogout}
-          className="text-sm font-medium text-slate-500 hover:text-red-600 transition-colors flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-red-50"
-        >
-          Logout
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-        </button>
-      </header>
-
       <main className="flex-1 flex items-center justify-center p-6 sm:p-12">
         <div className="max-w-xl w-full">
           <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 shadow-sm">

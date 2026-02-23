@@ -42,7 +42,7 @@ const ResetPasswordScreen: React.FC<ResetPasswordScreenProps> = ({ onPasswordRes
         // Sign out so the user must log in with the new password
         await supabase.auth.signOut();
       }
-    } catch (err: any) {
+    } catch {
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
