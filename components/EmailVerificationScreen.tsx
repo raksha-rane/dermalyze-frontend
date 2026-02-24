@@ -8,13 +8,23 @@ interface EmailVerificationScreenProps {
   onResendEmail: () => Promise<void>;
 }
 
+const COOLDOWN_SECONDS = 60;
+
 const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
   email,
   onNavigateToLogin,
   onResendEmail,
 }) => {
-  const [resending, setResending] = React.useState(false);
-  const [resendMsg, setResendMsg] = React.useState<string | null>(null);
+  const [resending,  setResending]  = React.useState(false);
+  const [resendMsg,  setResendMsg]  = React.useState<string | null>(null);
+  const [cooldown,   setCooldown]   = React.useState(0); // seconds remaining
+
+  // Tick the cooldown down every second
+  React.useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
 
   const handleResend = async () => {
     setResending(true);
@@ -22,13 +32,17 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
     try {
       await onResendEmail();
       setResendMsg('Verification email resent. Please check your inbox.');
+      setCooldown(COOLDOWN_SECONDS); // start cooldown only on success
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to resend. Please try again.';
       setResendMsg(message);
+      // no cooldown on failure — let the user retry
     } finally {
       setResending(false);
     }
   };
+
+  const resendDisabled = resending || cooldown > 0;
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-12 bg-slate-50 min-h-screen">
@@ -73,10 +87,14 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
 
             <button
               onClick={handleResend}
-              disabled={resending}
-              className="w-full text-sm font-medium text-slate-500 hover:text-teal-600 transition-colors text-center py-2 disabled:opacity-50"
+              disabled={resendDisabled}
+              className="w-full text-sm font-medium text-slate-500 hover:text-teal-600 transition-colors text-center py-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {resending ? 'Resending…' : "Didn't receive it? Resend email"}
+              {resending
+                ? 'Resending…'
+                : cooldown > 0
+                  ? `Resend available in ${cooldown}s`
+                  : "Didn't receive it? Resend email"}
             </button>
           </div>
 

@@ -12,7 +12,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
   // ── Profile state ───────────────────────────────────────────────────────────
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -37,7 +36,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
         if (user) {
           setEmail(user.email ?? '');
           setFullName(user.user_metadata?.full_name ?? '');
-          setAvatarUrl(user.user_metadata?.avatar_url ?? null);
         }
       } catch {
         setProfileMsg({ type: 'error', text: 'Failed to load profile data.' });
@@ -55,7 +53,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
     setSaving(true);
     try {
       const { error } = await supabase.auth.updateUser({
-        data: { full_name: fullName.trim(), avatar_url: avatarUrl },
+        data: { full_name: fullName.trim() },
       });
       if (error) throw error;
       setProfileMsg({ type: 'success', text: 'Profile updated successfully.' });
@@ -210,17 +208,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
         {/* ── Section 1: Profile Info ── */}
         <section className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm">
           <div className="flex items-center gap-4 mb-6">
-            {/* Avatar placeholder */}
-            <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold text-xl shrink-0">
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt="Profile"
-                  className="w-16 h-16 rounded-full object-cover"
-                />
-              ) : (
-                initials
-              )}
+            {/* Initials avatar */}
+            <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold text-xl shrink-0 select-none">
+              {initials}
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900">{fullName || 'Unnamed User'}</h2>
