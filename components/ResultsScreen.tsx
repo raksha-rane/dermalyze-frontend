@@ -76,11 +76,10 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
 
   const info = predictedClass ? classInfoMap[predictedClass.id] : undefined;
 
-  // Stable case ID — generated once per mount, never changes on re-render
-  const caseId = useMemo(
-    () => `DRM-${Date.now().toString(36).slice(-6).toUpperCase()}`,
-    [],
-  );
+  // Stable UUID v4 generated once per mount — used as the actual DB primary key
+  // and image storage path, so the displayed ID always matches the real record.
+  const caseId = useMemo(() => crypto.randomUUID(), []);
+  const caseIdDisplay = `DRM-${caseId.slice(0, 8).toUpperCase()}`;
   const analysisDate = new Date().toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -112,8 +111,10 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
           }
         }
 
-        // Insert analysis record
+        // Insert analysis record — id is the client-generated UUID so the
+        // displayed Case ID always matches what is stored in the database.
         await supabase.from('analyses').insert({
+          id: caseId,
           user_id: user.id,
           image_url,
           predicted_class_id: predictedClass.id,
@@ -171,7 +172,7 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
           <h1 className="text-sm font-semibold text-slate-500 uppercase tracking-widest">Analysis Result</h1>
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-slate-400 uppercase tracking-widest">Case ID:</span>
-            <span className="font-semibold text-slate-700 tabular-nums">{caseId}</span>
+            <span className="font-semibold text-slate-700 tabular-nums">{caseIdDisplay}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-slate-400 uppercase tracking-widest">Date:</span>

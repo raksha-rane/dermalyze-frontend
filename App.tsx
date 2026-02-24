@@ -186,10 +186,10 @@ const App: React.FC = () => {
               <EmailVerificationScreen
                 email={signupEmail}
                 onNavigateToLogin={() => navigate(ROUTES.login)}
-                onResendEmail={() => {
-                  if (signupEmail) {
-                    supabase.auth.resend({ type: 'signup', email: signupEmail });
-                  }
+                onResendEmail={async () => {
+                  if (!signupEmail) throw new Error('No email address available to resend to.');
+                  const { error } = await supabase.auth.resend({ type: 'signup', email: signupEmail });
+                  if (error) throw error;
                 }}
               />
             } />

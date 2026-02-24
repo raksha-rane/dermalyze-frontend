@@ -5,7 +5,7 @@ import Button from './ui/Button';
 interface EmailVerificationScreenProps {
   email: string;
   onNavigateToLogin: () => void;
-  onResendEmail: () => void;
+  onResendEmail: () => Promise<void>;
 }
 
 const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
@@ -20,10 +20,11 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({
     setResending(true);
     setResendMsg(null);
     try {
-      onResendEmail();
+      await onResendEmail();
       setResendMsg('Verification email resent. Please check your inbox.');
-    } catch {
-      setResendMsg('Failed to resend. Please try again.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to resend. Please try again.';
+      setResendMsg(message);
     } finally {
       setResending(false);
     }

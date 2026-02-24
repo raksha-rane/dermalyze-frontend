@@ -61,3 +61,33 @@ create policy "Users can read own images"
     bucket_id = 'analysis-images'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
+
+
+-- ── 4. Dashboard stats RPC ───────────────────────────────────────────────────
+-- Returns aggregated stats for the current user in a single round-trip.
+-- Uses auth.uid() internally — no user-id parameter needed, cannot be
+-- called on behalf of another user.
+create or replace function get_dashboard_stats()
+returns json language sql stable security definer as $$
+  select json_build_object(
+    'total',          count(*),
+    'this_month',     count(*) filter (where created_at >= date_trunc('month', now())),
+    'avg_confidence', round(avg(confidence)::numeric, 1),
+    'needs_review',   count(*) filter (where predicted_class_id in ('mel','bcc','akiec')),
+    'class_counts', (
+      select json_agg(row_to_json(t))
+      from (
+        select
+          predicted_class_id   as id,
+          predicted_class_name as name,
+          count(*)::int        as count
+        from analyses
+        where user_id = auth.uid()
+        group by predicted_class_id, predicted_class_name
+        order by count desc
+      ) t
+    )
+  )
+  from analyses
+  where user_id = auth.uid();
+$$;

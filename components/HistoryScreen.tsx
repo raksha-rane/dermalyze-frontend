@@ -12,11 +12,33 @@ interface HistoryScreenProps {
   onViewDetails: (item: AnalysisHistoryItem) => void;
 }
 
+const PAGE_SIZE = 20;
+
 const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) => {
   const [historyItems, setHistoryItems] = useState<AnalysisHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
-  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [loadingMore,   setLoadingMore]   = useState(false);
+  const [historyError,  setHistoryError]  = useState<string | null>(null);
+  const [hasMore,       setHasMore]       = useState(false);
+  const [page,          setPage]          = useState(0);
 
+  const mapRows = (data: Record<string, unknown>[]): AnalysisHistoryItem[] =>
+    data.map((row) => ({
+      id:         row.id as string,
+      date:       new Date(row.created_at as string).toLocaleDateString('en-US', {
+                    year: 'numeric', month: 'short', day: 'numeric',
+                  }),
+      time:       new Date(row.created_at as string).toLocaleTimeString('en-US', {
+                    hour: '2-digit', minute: '2-digit',
+                  }),
+      classId:    row.predicted_class_id as string,
+      className:  row.predicted_class_name as string,
+      confidence: row.confidence as number,
+      imageUrl:   (row.image_url as string | null) ?? undefined,
+      allScores:  (row.all_scores as AnalysisHistoryItem['allScores']) ?? undefined,
+    }));
+
+  // Initial load
   useEffect(() => {
     const fetchHistory = async () => {
       try {
@@ -24,34 +46,42 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
           .from('analyses')
           .select('id, created_at, predicted_class_id, predicted_class_name, confidence, image_url, all_scores')
           .order('created_at', { ascending: false })
-          .limit(50);
+          .range(0, PAGE_SIZE - 1);
 
         if (error) throw error;
-
-        const items: AnalysisHistoryItem[] = (data ?? []).map((row) => ({
-          id: row.id,
-          date: new Date(row.created_at).toLocaleDateString('en-US', {
-            year: 'numeric', month: 'short', day: 'numeric',
-          }),
-          time: new Date(row.created_at).toLocaleTimeString('en-US', {
-            hour: '2-digit', minute: '2-digit',
-          }),
-          classId: row.predicted_class_id,
-          className: row.predicted_class_name,
-          confidence: row.confidence,
-          imageUrl: row.image_url ?? undefined,
-          allScores: row.all_scores ?? undefined,
-        }));
-        setHistoryItems(items);
+        const rows = data ?? [];
+        setHistoryItems(mapRows(rows));
+        setHasMore(rows.length === PAGE_SIZE);
       } catch {
         setHistoryError('Could not load analysis history. Please try again.');
       } finally {
         setLoadingHistory(false);
       }
     };
-
     fetchHistory();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleLoadMore = async () => {
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    try {
+      const { data, error } = await supabase
+        .from('analyses')
+        .select('id, created_at, predicted_class_id, predicted_class_name, confidence, image_url, all_scores')
+        .order('created_at', { ascending: false })
+        .range(nextPage * PAGE_SIZE, (nextPage + 1) * PAGE_SIZE - 1);
+
+      if (error) throw error;
+      const rows = data ?? [];
+      setHistoryItems((prev) => [...prev, ...mapRows(rows)]);
+      setHasMore(rows.length === PAGE_SIZE);
+      setPage(nextPage);
+    } catch {
+      setHistoryError('Could not load more records. Please try again.');
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 text-slate-900 pb-12">
@@ -150,7 +180,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
                         </div>
                         <div>
                           <div className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Case Reference</div>
-                          <div className="text-sm font-semibold text-slate-700">#ANL-{item.id}00{item.id}</div>
+                          <div className="text-sm font-semibold text-slate-700 font-mono">DRM-{item.id.slice(0, 8).toUpperCase()}</div>
                         </div>
                       </div>
                     </td>
@@ -185,6 +215,34 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
               </tbody>
             </table>
           </div>
+
+          {/* Load More */}
+          {hasMore && (
+            <div className="px-6 py-5 border-t border-slate-100 flex justify-center">
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="flex items-center gap-2 text-sm font-semibold text-teal-600 hover:text-teal-700 disabled:opacity-50 transition-colors"
+              >
+                {loadingMore ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Loading…
+                  </>
+                ) : (
+                  <>
+                    Load more records
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
           </>)}
         </section>
 
@@ -196,7 +254,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
                 </svg>
              </div>
              <p className="text-xs text-blue-700 font-medium leading-relaxed">
-               Analysis history is fetched from your account and reflects up to the 50 most recent records, ordered newest first. Records are persisted across devices.
+               Analysis history is fetched from your account, ordered newest first. Records are persisted across devices and sessions.
              </p>
            </div>
         </div>

@@ -8,9 +8,7 @@ interface DashboardScreenProps {
   onNavigateToHistory: () => void;
 }
 
-// Classes that warrant clinical follow-up
-const HIGH_RISK_IDS = new Set(['mel', 'bcc', 'akiec']);
-
+// Classes that warrant clinical follow-up — kept for reference, filtering done server-side via RPC
 const SHORT_CLASS_NAMES: Record<string, string> = {
   akiec: 'Actinic Keratoses',
   bcc:   'Basal Cell Carcinoma',
@@ -42,6 +40,14 @@ const RISK_LABEL: Record<string, { label: string; cls: string }> = {
   vasc:  { label: 'Low',      cls: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
 };
 
+interface RpcResult {
+  total:          number;
+  this_month:     number;
+  avg_confidence: number | null;
+  needs_review:   number;
+  class_counts:   { id: string; name: string; count: number }[] | null;
+}
+
 interface DashStats {
   total: number;
   thisMonth: number;
@@ -63,56 +69,62 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 }) => {
   const [stats,    setStats]    = useState<DashStats | null>(null);
   const [loading,  setLoading]  = useState(true);
+  const [fetchErr, setFetchErr] = useState(false);
   const [userName, setUserName] = useState('');
 
   useEffect(() => {
     const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) setUserName(user.user_metadata?.full_name?.split(' ')[0] ?? '');
+      try {
+        const [
+          { data: { user } },
+          { data: rpcData,  error: rpcErr },
+          { data: lastRows, error: lastErr },
+        ] = await Promise.all([
+          supabase.auth.getUser(),
+          supabase.rpc('get_dashboard_stats'),
+          supabase
+            .from('analyses')
+            .select('predicted_class_id, predicted_class_name, confidence, created_at, image_url')
+            .order('created_at', { ascending: false })
+            .limit(1),
+        ]);
 
-      const { data, error } = await supabase
-        .from('analyses')
-        .select('predicted_class_id, predicted_class_name, confidence, created_at, image_url')
-        .order('created_at', { ascending: false });
+        if (user) setUserName(user.user_metadata?.full_name?.split(' ')[0] ?? '');
 
-      if (error || !data) { setLoading(false); return; }
+        if (rpcErr || !rpcData) { setFetchErr(true); setLoading(false); return; }
 
-      const now        = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const rpc  = rpcData as RpcResult;
+        const last = (!lastErr && lastRows && lastRows.length > 0) ? lastRows[0] : null;
 
-      const total       = data.length;
-      const thisMonth   = data.filter(r => new Date(r.created_at) >= monthStart).length;
-      const avgConf     = total > 0
-        ? Math.round(data.reduce((s, r) => s + r.confidence, 0) / total * 10) / 10
-        : null;
-      const needsReview = data.filter(r => HIGH_RISK_IDS.has(r.predicted_class_id)).length;
+        const lastAnalysis = last ? {
+          className:  SHORT_CLASS_NAMES[last.predicted_class_id] ?? last.predicted_class_name,
+          classId:    last.predicted_class_id,
+          confidence: last.confidence,
+          date: new Date(last.created_at).toLocaleDateString('en-GB', {
+            day: '2-digit', month: 'short', year: 'numeric',
+          }),
+          imageUrl: last.image_url ?? null,
+        } : null;
 
-      const countMap: Record<string, { name: string; count: number }> = {};
-      for (const r of data) {
-        if (!countMap[r.predicted_class_id])
-          countMap[r.predicted_class_id] = {
-            name: SHORT_CLASS_NAMES[r.predicted_class_id] ?? r.predicted_class_name,
-            count: 0,
-          };
-        countMap[r.predicted_class_id].count++;
+        const classCounts = (rpc.class_counts ?? []).map(c => ({
+          id:    c.id,
+          name:  SHORT_CLASS_NAMES[c.id] ?? c.name,
+          count: c.count,
+        }));
+
+        setStats({
+          total:         rpc.total,
+          thisMonth:     rpc.this_month,
+          avgConfidence: rpc.avg_confidence,
+          needsReview:   rpc.needs_review,
+          classCounts,
+          lastAnalysis,
+        });
+      } catch {
+        setFetchErr(true);
+      } finally {
+        setLoading(false);
       }
-      const classCounts = Object.entries(countMap)
-        .map(([id, v]) => ({ id, name: v.name, count: v.count }))
-        .sort((a, b) => b.count - a.count);
-
-      const last = data[0] ?? null;
-      const lastAnalysis = last ? {
-        className:  SHORT_CLASS_NAMES[last.predicted_class_id] ?? last.predicted_class_name,
-        classId:    last.predicted_class_id,
-        confidence: last.confidence,
-        date: new Date(last.created_at).toLocaleDateString('en-GB', {
-          day: '2-digit', month: 'short', year: 'numeric',
-        }),
-        imageUrl: last.image_url ?? null,
-      } : null;
-
-      setStats({ total, thisMonth, avgConfidence: avgConf, needsReview, classCounts, lastAnalysis });
-      setLoading(false);
     };
     load();
   }, []);
@@ -145,6 +157,18 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   }
 
   const maxCount = stats ? Math.max(...stats.classCounts.map(c => c.count), 1) : 1;
+
+  // ── Fetch error state ───────────────────────────────────────────────────
+  if (fetchErr) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="text-center max-w-sm">
+          <p className="text-sm font-medium text-slate-600 mb-1">Could not load dashboard data.</p>
+          <p className="text-xs text-slate-400">Check your connection and refresh the page.</p>
+        </div>
+      </div>
+    );
+  }
 
   // ── Empty state (new user) ──────────────────────────────────────────────
   if (!stats || stats.total === 0) {

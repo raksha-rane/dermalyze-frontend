@@ -33,17 +33,8 @@ const HistoryDetailScreen: React.FC<HistoryDetailScreenProps> = ({ item, onBack 
 
   if (!item) return null;
 
-  // Use real all_scores from DB if available, otherwise fall back to a
-  // fabricated distribution using only the known predicted class score.
-  const classes = item.allScores ?? [
-    { id: 'akiec', name: 'Actinic keratoses and intraepithelial carcinoma', score: item.classId === 'akiec' ? item.confidence : 2.4 },
-    { id: 'bcc', name: 'Basal cell carcinoma', score: item.classId === 'bcc' ? item.confidence : 10.2 },
-    { id: 'bkl', name: 'Benign keratosis-like lesions', score: item.classId === 'bkl' ? item.confidence : 6.8 },
-    { id: 'df', name: 'Dermatofibroma', score: item.classId === 'df' ? item.confidence : 1.5 },
-    { id: 'mel', name: 'Melanoma', score: item.classId === 'mel' ? item.confidence : 5.1 },
-    { id: 'nv', name: 'Melanocytic nevi', score: item.classId === 'nv' ? item.confidence : 4.3 },
-    { id: 'vasc', name: 'Vascular lesions', score: item.classId === 'vasc' ? item.confidence : 0.9 },
-  ];
+  // Only use real scores from the DB — never fabricate a distribution.
+  const classes = item.allScores ?? null;
 
   const info = classInfoMap[item.classId];
   const caseId = `#ANL-${item.id}00${item.id}`;
@@ -92,8 +83,15 @@ const HistoryDetailScreen: React.FC<HistoryDetailScreenProps> = ({ item, onBack 
           imageUrl={item.imageUrl}
         />
 
-        {/* PROBABILITY CHART — full width */}
-        <ProbabilityChart classes={classes} predictedClassId={item.classId} />
+        {/* PROBABILITY CHART — only render when real scores are available */}
+        {classes ? (
+          <ProbabilityChart classes={classes} predictedClassId={item.classId} />
+        ) : (
+          <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Probability Breakdown</p>
+            <p className="text-sm text-slate-500">Full probability breakdown is not available for this record.</p>
+          </section>
+        )}
 
         {/* MEDICAL INFO — Full-width row below the bento pair */}
         {info ? (
