@@ -4,7 +4,7 @@ import Button from './ui/Button';
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_DIMENSION_PX = 448;            // resize longest edge to ≤ 448 px
-const JPEG_QUALITY = 1.0;               // lossless JPEG encoding
+const JPEG_QUALITY = 1.0;        
 
 /** Compress a data-URL image using canvas, returns a JPEG data-URL. */
 function compressImage(dataUrl: string): Promise<string> {

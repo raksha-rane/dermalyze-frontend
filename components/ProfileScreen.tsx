@@ -118,21 +118,20 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
 
       // 2. Call the Edge Function to fully delete the auth user.
       //    ON DELETE CASCADE on the analyses table auto-removes all records.
-      const { data, error: fnError } = await supabase.functions.invoke('delete-user');
+      const { error: fnError } = await supabase.functions.invoke('delete-user');
 
       if (fnError) {
-        // Try to extract the real error message from the response
+        // FunctionsHttpError: real message lives in the response body, not fnError.message
         let errorMessage = 'Account deletion failed.';
         try {
-          if (fnError instanceof Error) {
+          // context is the raw Response object when the function returns non-2xx
+          const body = await (fnError as unknown as { context: Response }).context.json();
+          if (body?.error) errorMessage = body.error;
+          else if (fnError.message && fnError.message !== 'Edge Function returned a non-2xx status code') {
             errorMessage = fnError.message;
           }
-          // If data contains an error field from our function's JSON response
-          if (data && typeof data === 'object' && 'error' in data) {
-            errorMessage = (data as { error: string }).error;
-          }
         } catch {
-          // use default
+          // fall back to generic message
         }
         throw new Error(errorMessage);
       }

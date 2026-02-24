@@ -50,6 +50,10 @@ const ProcessingScreen: React.FC<ProcessingScreenProps> = ({
     run();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Render nothing while navigation away is pending — prevents the spinner
+  // flashing on page refresh or direct URL access when image is not in state.
+  if (!image) return null;
+
   return (
     <div className="flex-1 flex flex-col bg-slate-50">
       <main className="flex-1 flex items-center justify-center p-6 sm:p-12">
