@@ -9,37 +9,90 @@ interface SignupScreenProps {
   onSignupSuccess?: (email: string) => void;
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+type FieldKey = 'email' | 'password' | 'confirmPassword';
+
 const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin, onSignupSuccess }) => {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [name,            setName]            = useState('');
+  const [email,           setEmail]           = useState('');
+  const [password,        setPassword]        = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [serverError,     setServerError]     = useState('');
+  const [loading,         setLoading]         = useState(false);
+  const [success,         setSuccess]         = useState(false);
+
+  const [fieldErrors, setFieldErrors] = useState<Record<FieldKey, string>>({
+    email: '', password: '', confirmPassword: '',
+  });
+  const [touched, setTouched] = useState<Record<FieldKey, boolean>>({
+    email: false, password: false, confirmPassword: false,
+  });
+
+  // Returns the error string for a field given its current value
+  const validate = (field: FieldKey, value: string, currentPassword = password): string => {
+    switch (field) {
+      case 'email':
+        if (!value.trim()) return 'Please enter your email address.';
+        if (!EMAIL_RE.test(value.trim())) return 'Please enter a valid email address.';
+        return '';
+      case 'password':
+        if (value.length > 0 && value.length < 6) return 'Password must be at least 6 characters.';
+        return '';
+      case 'confirmPassword':
+        if (value && value !== currentPassword) return 'Passwords do not match.';
+        return '';
+    }
+  };
+
+  const handleBlur = (field: FieldKey) => {
+    const value = field === 'email' ? email : field === 'password' ? password : confirmPassword;
+    setTouched(prev => ({ ...prev, [field]: true }));
+    setFieldErrors(prev => ({ ...prev, [field]: validate(field, value) }));
+  };
+
+  const handleEmailChange = (v: string) => {
+    setEmail(v);
+    if (touched.email) setFieldErrors(prev => ({ ...prev, email: validate('email', v) }));
+  };
+
+  const handlePasswordChange = (v: string) => {
+    setPassword(v);
+    if (touched.password) setFieldErrors(prev => ({ ...prev, password: validate('password', v) }));
+    // Re-check confirm if it's already been touched
+    if (touched.confirmPassword)
+      setFieldErrors(prev => ({ ...prev, confirmPassword: validate('confirmPassword', confirmPassword, v) }));
+  };
+
+  const handleConfirmChange = (v: string) => {
+    setConfirmPassword(v);
+    if (touched.confirmPassword)
+      setFieldErrors(prev => ({ ...prev, confirmPassword: validate('confirmPassword', v) }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setServerError('');
 
-    if (!email.trim()) {
-      setError('Please enter your email address.');
-      return;
-    }
+    // Touch all fields so errors become visible
+    const allTouched: Record<FieldKey, boolean> = { email: true, password: true, confirmPassword: true };
+    setTouched(allTouched);
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
-      return;
-    }
+    const emailErr   = validate('email',           email);
+    const pwErr      = validate('password',        password);
+    const confirmErr = validate('confirmPassword', confirmPassword);
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
+    // Also enforce that both password fields are non-empty on submit
+    const pwRequired      = !password          ? 'Please enter a password.'         : pwErr;
+    const confirmRequired = !confirmPassword   ? 'Please confirm your password.'    : confirmErr;
+
+    setFieldErrors({ email: emailErr, password: pwRequired, confirmPassword: confirmRequired });
+
+    if (emailErr || pwRequired || confirmRequired) return;
 
     setLoading(true);
     try {
-      const { error: authError } = await supabase.auth.signUp({
+      const { data, error: authError } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
@@ -50,13 +103,15 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin, onSignup
       });
 
       if (authError) {
-        if (authError.message.includes('already registered')) {
-          setError('This email is already registered. Please log in instead.');
-        } else if (authError.message.includes('valid email')) {
-          setError('Please enter a valid email address.');
+        if (authError.message.includes('valid email')) {
+          setServerError('Please enter a valid email address.');
         } else {
-          setError(authError.message);
+          setServerError(authError.message);
         }
+      } else if (data.user?.identities?.length === 0) {
+        // Supabase silently "succeeds" for existing emails to prevent enumeration.
+        // An empty identities array is the reliable signal that the email is taken.
+        setServerError('This email is already registered. Please log in instead.');
       } else {
         if (onSignupSuccess) {
           onSignupSuccess(email.trim());
@@ -65,7 +120,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin, onSignup
         }
       }
     } catch (err: unknown) {
-      setError('An unexpected error occurred. Please try again.');
+      setServerError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -134,9 +189,9 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin, onSignup
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-1">
-          {error && (
+          {serverError && (
             <div className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-lg text-center font-medium">
-              {error}
+              {serverError}
             </div>
           )}
           <Input 
@@ -151,24 +206,27 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigateToLogin, onSignup
             type="email" 
             placeholder="Enter your email id"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
+            onChange={(e) => handleEmailChange(e.target.value)}
+            onBlur={() => handleBlur('email')}
+            error={fieldErrors.email || undefined}
           />
           <Input 
             label="Password" 
             type="password" 
             placeholder="••••••••"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
+            onChange={(e) => handlePasswordChange(e.target.value)}
+            onBlur={() => handleBlur('password')}
+            error={fieldErrors.password || undefined}
           />
           <Input 
             label="Confirm Password" 
             type="password" 
             placeholder="••••••••"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
+            onChange={(e) => handleConfirmChange(e.target.value)}
+            onBlur={() => handleBlur('confirmPassword')}
+            error={fieldErrors.confirmPassword || undefined}
           />
           
           <div className="pt-4">
