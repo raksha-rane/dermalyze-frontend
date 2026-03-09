@@ -40,6 +40,34 @@ npm install
 
 Create a `.env.local` file in the project root:
 
+```bash
+cp .env.local.example .env.local
+```
+
+Set at least:
+
+```env
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+For inference API:
+
+```env
+# Deployed backend URL (recommended for production frontend)
+VITE_API_URL=https://your-backend-domain.com
+```
+
+Local dev fallback:
+
+- If `VITE_API_URL` is not set, frontend calls `/api`.
+- Vite proxies `/api/*` to `http://localhost:8000` by default.
+- Override local backend target with:
+
+```bash
+BACKEND_URL=http://localhost:9000 npm run dev
+```
+
 
 
 
