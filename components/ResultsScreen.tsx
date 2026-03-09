@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Button from './ui/Button';
 import ResultCard from './ui/ResultCard';
 import ProbabilityChart from './ui/ProbabilityChart';
@@ -87,8 +87,11 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
   });
 
   // Persist the analysis record + image to Supabase once results are ready
+  const savedRef = useRef(false);
   useEffect(() => {
+    if (savedRef.current) return;
     if (!results || !predictedClass) return;
+    savedRef.current = true;
 
     const saveRecord = async () => {
       try {

@@ -147,13 +147,6 @@ const App: React.FC = () => {
 
   if (!authChecked) return <PageLoader />;
 
-  // ── Layout wrapper for all protected screens ──────────────────────────────
-  const Protected = ({ children }: { children: React.ReactNode }) => (
-    <AppLayout onLogout={handleRequestLogout}>
-      {children}
-    </AppLayout>
-  );
-
   return (
     <ErrorBoundary>
       <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
@@ -196,15 +189,15 @@ const App: React.FC = () => {
 
             {/* ── Protected (all share the AppLayout sidebar) ── */}
             <Route path={ROUTES.dashboard} element={
-              <Protected>
+              <AppLayout onLogout={handleRequestLogout}>
                 <DashboardScreen
                   onNavigateToUpload={() => navigate(ROUTES.upload)}
                   onNavigateToHistory={() => navigate(ROUTES.history)}
                 />
-              </Protected>
+              </AppLayout>
             } />
             <Route path={ROUTES.upload} element={
-              <Protected>
+              <AppLayout onLogout={handleRequestLogout}>
                 <UploadScreen
                   selectedImage={selectedImage}
                   onImageSelect={setSelectedImage}
@@ -212,65 +205,65 @@ const App: React.FC = () => {
                   onRunClassification={() => navigate(ROUTES.processing)}
                   onError={(msg) => { setAnalysisError(msg ?? null); navigate(ROUTES.error); }}
                 />
-              </Protected>
+              </AppLayout>
             } />
             <Route path={ROUTES.processing} element={
-              <Protected>
+              <AppLayout onLogout={handleRequestLogout}>
                 <ProcessingScreen
                   image={selectedImage}
                   onComplete={(results) => { setAnalysisResults(results); navigate(ROUTES.results); }}
                   onError={(msg) => { setAnalysisError(msg ?? null); navigate(ROUTES.error); }}
                 />
-              </Protected>
+              </AppLayout>
             } />
             <Route path={ROUTES.results} element={
-              <Protected>
+              <AppLayout onLogout={handleRequestLogout}>
                 <ResultsScreen
                   image={selectedImage}
                   results={analysisResults}
                   onAnalyzeAnother={resetAnalysis}
                   onNavigateToHistory={() => navigate(ROUTES.history)}
                 />
-              </Protected>
+              </AppLayout>
             } />
             <Route path={ROUTES.history} element={
-              <Protected>
+              <AppLayout onLogout={handleRequestLogout}>
                 <HistoryScreen
                   onBack={() => navigate(ROUTES.dashboard)}
                   onViewDetails={handleViewHistoryDetail}
                 />
-              </Protected>
+              </AppLayout>
             } />
             <Route path={ROUTES.historyDetail} element={
-              <Protected>
+              <AppLayout onLogout={handleRequestLogout}>
                 <HistoryDetailScreen
                   item={selectedHistoryItem}
                   onBack={() => navigate(ROUTES.history)}
                 />
-              </Protected>
+              </AppLayout>
             } />
             <Route path={ROUTES.error} element={
-              <Protected>
+              <AppLayout onLogout={handleRequestLogout}>
                 <ErrorScreen
                   onBackToUpload={resetAnalysis}
                   message={analysisError ?? undefined}
                 />
-              </Protected>
+              </AppLayout>
             } />
             <Route path={ROUTES.about} element={
-              <Protected>
+              <AppLayout onLogout={handleRequestLogout}>
                 <AboutScreen onBack={() => navigate(ROUTES.dashboard)} />
-              </Protected>
+              </AppLayout>
             } />
             <Route path={ROUTES.help} element={
-              <Protected>
+              <AppLayout onLogout={handleRequestLogout}>
                 <HelpScreen onBack={() => navigate(ROUTES.dashboard)} />
-              </Protected>
+              </AppLayout>
             } />
             <Route path={ROUTES.profile} element={
-              <Protected>
+              <AppLayout onLogout={handleRequestLogout}>
                 <ProfileScreen onBack={() => navigate(ROUTES.dashboard)} />
-              </Protected>
+              </AppLayout>
             } />
 
             {/* Fallbacks */}
