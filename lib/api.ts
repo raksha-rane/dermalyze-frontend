@@ -6,17 +6,15 @@ import type { ClassResult } from './types';
  * Expected backend response:
  *   { "classes": [{ "id": "mel", "name": "Melanoma", "score": 67.4 }, ...] }
  *
- * Environment variable required:
+ * Environment variable (optional):
  *   VITE_API_URL — base URL of the deployed FastAPI backend
  *   e.g. https://dermalyze-api.onrender.com
+ *
+ * If not set, requests fall back to '/api' for local Vite proxy usage.
  */
 export async function classifyImage(imageDataUrl: string): Promise<ClassResult[]> {
-  const apiUrl = import.meta.env.VITE_API_URL;
-  if (!apiUrl) {
-    throw new Error(
-      'VITE_API_URL is not set. Please add it to your .env.local file.'
-    );
-  }
+  const configuredApiUrl = import.meta.env.VITE_API_URL as string | undefined;
+  const apiBase = (configuredApiUrl?.trim() || '/api').replace(/\/$/, '');
 
   // Convert base64 data URL → Blob so we can send as multipart/form-data
   const res = await fetch(imageDataUrl);
@@ -26,7 +24,7 @@ export async function classifyImage(imageDataUrl: string): Promise<ClassResult[]
   // Backend expects the field name "file"
   form.append('file', blob, 'image.jpg');
 
-  const response = await fetch(`${apiUrl}/classify`, {
+  const response = await fetch(`${apiBase}/classify`, {
     method: 'POST',
     body: form,
   });
